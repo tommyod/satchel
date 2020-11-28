@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false # Allow one of the matrix builds to fail without failing others
       matrix:
-        os: ubuntu-latest
+        os: [ubuntu-latest]
         
         
     # The job
