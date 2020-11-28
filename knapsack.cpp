@@ -9,24 +9,33 @@
 #include <climits>
 // using namespace std;
 
-// Stores the number of items
-int size;
-
 // Stores the knapsack capacity
 float capacity;
 
-typedef struct Item
+// TODO: What does 'typedef' mean?
+// TODO: Why does it say Item after the definition?
+
+class Item
 {
-
-    // Stores the weight of items
-    float weight;
-
-    // Stores the value of items
-    int value;
-
-    // Stores the index of items
+public:
+    float weight; 
+    float value;
     int idx;
-} Item;
+
+    Item(float weight, float value, int idx)
+    {
+        // Store values on the instance
+        this->weight = weight;
+        this->value = value;
+        this->idx = idx;
+    }
+
+    void print(){
+        std::cout << "Item(weight="<< weight << ", value="<<value<< ", idx=" <<idx <<")" << std::endl;
+    }
+
+};
+
 
 typedef struct Node
 {
@@ -40,20 +49,20 @@ typedef struct Node
 
 // Function to calculate upper bound (includes fractional part of the items)
 float upper_bound(float total_value, float total_weight,
-                  int idx, std::vector<Item> &arr)
+                  int idx, std::vector<Item> &items)
 {
     float value = total_value;
     float weight = total_weight;
-    for (int i = idx; i < size; i++)
+    for (int i = idx; i < items.size(); i++)
     {
-        if (weight + arr[i].weight <= capacity)
+        if (weight + items[i].weight <= capacity)
         {
-            weight += arr[i].weight;
-            value -= arr[i].value;
+            weight += items[i].weight;
+            value -= items[i].value;
         }
         else
         {
-            value -= (float)(capacity - weight) / arr[i].weight * arr[i].value;
+            value -= (float)(capacity - weight) / items[i].weight * items[i].value;
             break;
         }
     }
@@ -61,16 +70,16 @@ float upper_bound(float total_value, float total_weight,
 }
 
 // Function to calculate lower bound (no fractional part of the items)
-float lower_bound(float total_value, float total_weight, int idx, std::vector<Item> &arr)
+float lower_bound(float total_value, float total_weight, int idx, std::vector<Item> &items)
 {
     float value = total_value;
     float weight = total_weight;
-    for (int i = idx; i < size; i++)
+    for (int i = idx; i < items.size(); i++)
     {
-        if (weight + arr[i].weight <= capacity)
+        if (weight + items[i].weight <= capacity)
         {
-            weight += arr[i].weight;
-            value -= arr[i].value;
+            weight += items[i].weight;
+            value -= items[i].value;
         }
         else
         {
@@ -86,17 +95,17 @@ float lower_bound(float total_value, float total_weight, int idx, std::vector<It
 class Compare
 {
 public:
-    bool operator() (Node a, Node b)
+    bool operator() (Node &a, Node &b)
     {
         return a.lower_bound > b.lower_bound;
     }
 };
 
-void knapsack(std::vector<Item> &arr)
+void knapsack(std::vector<Item> &items)
 {
 
     // Sort the items based on the value/weight ratio
-    sort(arr.begin(), arr.end(),
+    sort(items.begin(), items.end(),
          [&](Item &a, Item &b) {
              return (a.value / a.weight) > (b.value / b.weight);
          });
@@ -105,24 +114,27 @@ void knapsack(std::vector<Item> &arr)
 
     // final_lb -> Minimum lower bound of all the paths that reached the final level
     float min_lb = 0, final_lb = INT_MAX;
+    
 
     // curr_path -> Boolean array to store at every index if the element is included or not
     // final_path -> Boolean array to store the result of selection array when it reached the last level
-    std::vector<bool> curr_path = std::vector<bool>(size, false);
-    std::vector<bool> final_path = std::vector<bool>(size, false);
+    std::vector<bool> curr_path = std::vector<bool>(items.size(), false);
+    std::vector<bool> final_path = std::vector<bool>(items.size(), false);
 
     // Priority queue to store the nodes based on lower bounds
     // https://en.cppreference.com/w/cpp/container/priority_queue
     std::priority_queue<Node, std::vector<Node>, Compare> pq;
 
     Node current, left, right;
-    current.lower_bound = current.upper_bound = current.total_weight = current.total_value = current.level = current.flag = 0;
+    current.lower_bound = current.upper_bound = current.total_weight = 0;
+    current.total_value = current.level = current.flag = 0;
 
     // Insert a dummy node
     pq.push(current);
 
     while (!pq.empty())
     {
+
         current = pq.top();
         pq.pop();
         std::cout << "Popped." << std::endl;
@@ -145,12 +157,12 @@ void knapsack(std::vector<Item> &arr)
         if (current.level != 0)
             curr_path[current.level - 1] = current.flag;
 
-        if (current.level == size)
+        // Reached the bottom of the tree
+        if (current.level == items.size())
         {
-            // Reached last level
             if (current.lower_bound < final_lb)
-                for (int i = 0; i < size; i++)
-                    final_path[arr[i].idx] = curr_path[i];
+                for (int i = 0; i < items.size(); i++)
+                    final_path[items[i].idx] = curr_path[i];
             final_lb = std::min(current.lower_bound, final_lb);
             continue;
         }
@@ -164,9 +176,9 @@ void knapsack(std::vector<Item> &arr)
         // of that of parent
         right.upper_bound = upper_bound(current.total_value,
                            current.total_weight, level + 1,
-                           arr);
+                           items);
         right.lower_bound = lower_bound(current.total_value, current.total_weight,
-                           level + 1, arr);
+                           level + 1, items);
         right.level = level + 1;
         right.flag = false;
         right.total_value = current.total_value;
@@ -174,26 +186,26 @@ void knapsack(std::vector<Item> &arr)
 
         // Check whether adding the current
         // item will not exceed the knapsack weight
-        if (current.total_weight + arr[current.level].weight <= capacity)
+        if (current.total_weight + items[current.level].weight <= capacity)
         {
 
             // left node -> includes current item
             // c and lb should be calculated
             // including the current item.
             left.upper_bound = upper_bound(
-                current.total_value - arr[level].value,
-                current.total_weight + arr[level].weight,
-                level + 1, arr);
+                current.total_value - items[level].value,
+                current.total_weight + items[level].weight,
+                level + 1, items);
 
             left.lower_bound = lower_bound(
-                current.total_value - arr[level].value,
-                current.total_weight + arr[level].weight,
-                level + 1, arr);
+                current.total_value - items[level].value,
+                current.total_weight + items[level].weight,
+                level + 1, items);
 
             left.level = level + 1;
             left.flag = true;
-            left.total_value = current.total_value - arr[level].value;
-            left.total_weight = current.total_weight + arr[level].weight;
+            left.total_value = current.total_value - items[level].value;
+            left.total_weight = current.total_weight + items[level].weight;
         }
 
         // If Left node cannot be inserted
@@ -232,7 +244,7 @@ void knapsack(std::vector<Item> &arr)
 
     std::cout << "Items in the knapsack : \n";
 
-    for (int i = 0; i < size; i++)
+    for (int i = 0; i < items.size(); i++)
     {
         std::cout << final_path[i] << " ";
     }
@@ -248,7 +260,7 @@ int main()
     std::vector<int> values = {3, 8, 3, 5, 2, 2, 9, 6, 1, 9, 7, 1, 4, 3, 1, 3, 6, 3, 2, 1, 1, 3, 6, 7, 3, 1, 8, 5, 5, 3, 9, 5, 9, 6, 1, 5, 4, 4, 1, 5, 8, 5, 4, 5, 4, 1, 5, 7, 8, 3, 6, 3, 4, 1, 6, 3, 4, 7, 1, 7, 1, 1, 7, 7, 3, 7, 6, 1, 9, 9, 3, 2, 1, 8, 4, 4, 2, 1, 1, 7, 9, 3, 4, 3, 9, 1, 6, 2, 8, 4, 2, 3, 7, 9, 5, 5, 1, 1, 5, 9, 9, 8, 8, 8, 6, 4, 5, 2, 9, 1, 1, 2, 5, 8, 4, 7, 4, 8, 6, 8, 7, 2, 9, 9, 3, 5, 3, 2, 7, 4, 5, 7, 1, 4, 2, 1, 9, 1, 5, 8, 3, 5, 3, 1, 1, 6, 5, 4, 1, 9, 9, 9, 6, 6, 4, 3, 8, 5, 9, 5, 1, 4, 6, 8, 3, 8, 3, 1, 1, 5, 8, 1, 6, 5, 7, 5, 6, 2, 1, 9, 7, 5, 9, 9, 2, 8, 9, 5, 7, 8, 3, 2, 2, 7, 8, 9, 6, 9, 5, 4, 3, 8, 7, 3, 8, 2, 4, 7, 5, 3, 4, 1, 6, 7, 7, 4, 8, 7, 6, 8, 9, 5, 9, 7, 4, 9, 8, 4, 3, 1, 9, 9, 7, 8, 2, 5, 2, 1, 7, 3, 4, 2, 1, 7, 4, 2, 9, 7, 8, 1, 2, 3, 8, 7, 2, 7, 1, 9, 9, 6, 8, 5, 4, 3, 5, 5, 5, 8, 1, 8, 8, 1, 9, 8, 9, 7, 1, 2, 8, 7, 1, 5, 6, 4, 9, 1, 1, 8, 4, 3, 9, 3, 2, 9, 7, 4, 4, 7, 6, 3, 6, 7, 5, 3, 7, 9, 7, 7, 8, 1, 6, 5, 5, 4, 1, 2, 8, 5, 5, 9, 3, 4, 7, 4, 9, 3, 3, 5, 5, 5, 1, 4, 3, 8, 2, 7, 8, 9, 4, 9, 1, 7, 4, 3, 2, 9, 5, 3, 7, 5, 1, 8, 4, 5, 8, 7, 3, 6, 5, 3, 6, 4, 4, 4, 7, 6, 4, 2, 1, 9, 7, 9, 3, 5, 2, 4, 1, 6, 7, 5, 9, 2, 2, 8, 9, 2, 1, 6, 6, 8, 1, 2, 9, 5, 4, 4, 3, 2, 6, 2, 2, 5, 2, 7, 5, 7, 7, 1, 7, 8, 7, 8, 8, 8, 2, 5, 4, 6, 7, 8, 8, 3, 6, 6, 8, 8, 6, 1, 3, 9, 4, 2, 5, 7, 9, 1, 2, 3, 4, 3, 7, 2, 1, 3, 6, 8, 1, 1, 3, 2, 5, 8, 1, 2, 2, 6, 7, 5, 4, 4, 8, 3, 1, 1, 6, 7, 5, 4, 6, 8, 1, 2, 5, 9, 5, 4, 9, 4, 2, 6, 8, 6, 2, 3, 2, 3, 9, 6, 9, 9, 9, 3, 9, 3, 6, 8, 3, 7, 2, 1, 9, 1, 3, 9, 9, 8, 1, 4, 6, 9, 5, 4, 8, 8, 5, 5, 4, 3, 4, 4, 8, 9, 8, 5, 1, 8, 6, 3, 8, 1, 2, 6, 1, 2, 8, 9, 4, 4, 7, 9, 6, 3, 4, 3, 3, 4, 4, 9, 5, 2, 8, 4, 6, 5, 8, 1, 1, 6, 7, 8, 8, 9, 2, 7, 2, 3, 2, 7, 2, 5, 5, 1, 1, 9, 7, 7, 3, 1, 1, 9, 1, 8, 3, 5, 7, 3, 5, 3, 5, 2, 3, 6, 8, 4, 3, 6, 7, 3, 8, 8, 8, 2, 9, 5, 9, 1, 8, 3, 5, 4, 8, 9, 2, 9, 5, 4, 6, 6, 4, 2, 8, 6, 9, 8, 9, 5, 5, 1, 9, 7, 6, 8, 2, 8, 4, 9, 6, 4, 7, 4, 1, 1, 5, 9, 8, 4, 1, 5, 5, 8, 2, 3, 2, 2, 2, 5, 1, 7, 5, 9, 2, 2, 9, 7, 6, 8, 6, 4, 3, 2, 2, 9, 6, 9, 6, 3, 4, 6, 5, 7, 8, 3, 5, 9, 8, 2, 4, 9, 1, 3, 1, 8, 9, 5, 1, 8, 1, 4, 4, 5, 2, 1, 4, 6, 7, 2, 4, 8, 2, 6, 6, 4, 8, 4, 9, 2, 3, 4, 5, 3, 4, 2, 9, 6, 6, 5, 7, 3, 7, 1, 7, 1, 8, 6, 5, 1, 2, 8, 4, 5, 7, 8, 3, 3, 7, 1, 2, 5, 6, 6, 4, 4, 7, 4, 2, 9, 4, 1, 5, 8, 3, 7, 5, 7, 7, 2, 1, 3, 2, 8, 3, 2, 9, 3, 7, 3, 4, 7, 8, 7, 2, 7, 8, 9, 2, 6, 5, 1, 7, 3, 4, 3, 5, 8, 8, 9, 3, 2, 9, 5, 8, 9, 1, 9, 8, 5, 6, 6, 6, 6, 1, 5, 8, 1, 2, 3, 5, 1, 8, 2, 3, 7, 5, 2, 2, 2, 6, 1, 8, 8, 4, 4, 6, 7, 3, 8, 1, 5, 5, 5, 8, 8, 6, 1, 2, 2, 2, 2, 1, 6, 4, 7, 5, 8, 6, 8, 1, 4, 8, 1, 5, 4, 5, 5, 1, 3, 8, 2, 9, 8, 8, 1, 3, 5, 3, 2, 2, 2, 7, 8, 7, 2, 7, 4, 3, 3, 6, 5, 8, 2, 2, 2, 3, 6, 6, 7, 4, 3, 2, 8, 3, 5, 6, 3, 9, 2, 6, 5, 2, 7, 7, 6, 9, 9, 9, 6, 8, 4, 6, 2, 8, 4, 9, 6, 9, 4, 2, 7, 4, 8, 2, 3, 2, 4, 1, 8, 2, 6, 5, 8, 3, 7, 7, 3, 1, 6, 9, 8, 8, 9, 9, 3, 3, 2, 4, 9, 7, 3, 5, 1, 7, 1, 5, 1, 9, 8, 3, 2, 8, 6, 8, 5, 7, 5, 2, 2, 8, 3, 4, 8, 9, 6, 1, 8, 2, 9, 7, 2, 5, 5, 2, 4, 2, 7, 1, 5, 5, 4, 4, 6};
     std::vector<int> weights = {9, 3, 6, 8, 2, 8, 4, 8, 3, 4, 1, 6, 3, 1, 8, 3, 5, 7, 2, 8, 7, 3, 1, 6, 1, 9, 4, 5, 3, 1, 9, 1, 6, 3, 9, 9, 2, 4, 5, 6, 6, 5, 5, 6, 2, 6, 8, 9, 3, 5, 6, 4, 5, 3, 4, 4, 6, 9, 2, 1, 5, 5, 6, 1, 1, 1, 2, 9, 9, 5, 1, 2, 4, 7, 5, 1, 4, 1, 3, 4, 1, 7, 9, 5, 2, 4, 8, 8, 2, 4, 9, 2, 6, 7, 9, 1, 6, 6, 2, 5, 4, 6, 7, 8, 3, 6, 2, 3, 8, 7, 4, 8, 6, 7, 1, 8, 8, 5, 3, 7, 2, 3, 3, 8, 5, 1, 3, 4, 6, 7, 9, 5, 2, 3, 3, 3, 5, 7, 6, 9, 2, 4, 6, 3, 8, 8, 7, 5, 2, 9, 5, 4, 8, 8, 9, 8, 6, 3, 7, 8, 3, 4, 3, 6, 4, 9, 4, 9, 9, 2, 7, 3, 8, 2, 7, 5, 2, 3, 4, 1, 2, 7, 6, 4, 9, 8, 7, 7, 4, 7, 2, 2, 9, 6, 2, 5, 8, 9, 9, 8, 6, 3, 9, 3, 4, 4, 7, 2, 1, 9, 2, 7, 2, 3, 7, 6, 1, 8, 4, 2, 2, 8, 4, 4, 4, 4, 1, 8, 4, 4, 3, 3, 5, 6, 3, 8, 5, 8, 6, 3, 3, 1, 8, 2, 9, 9, 9, 2, 2, 3, 3, 2, 6, 3, 5, 8, 1, 7, 2, 2, 8, 6, 3, 9, 6, 8, 4, 1, 5, 4, 5, 5, 5, 8, 2, 8, 1, 3, 5, 2, 7, 9, 9, 5, 2, 1, 5, 7, 1, 2, 3, 9, 2, 5, 1, 7, 7, 1, 7, 7, 1, 6, 5, 1, 5, 9, 7, 2, 4, 4, 3, 2, 1, 3, 5, 2, 2, 4, 7, 1, 4, 5, 1, 5, 4, 1, 2, 4, 6, 7, 2, 9, 5, 7, 2, 6, 6, 2, 1, 5, 2, 4, 8, 2, 4, 8, 1, 4, 6, 8, 8, 2, 7, 9, 4, 4, 4, 8, 5, 5, 7, 2, 4, 6, 9, 2, 6, 9, 6, 7, 6, 9, 2, 8, 2, 6, 8, 8, 6, 4, 9, 9, 5, 9, 9, 5, 6, 6, 1, 7, 1, 4, 7, 3, 2, 8, 5, 6, 5, 3, 5, 4, 9, 7, 5, 5, 3, 1, 8, 4, 7, 2, 7, 9, 5, 6, 3, 6, 4, 9, 2, 8, 5, 5, 5, 1, 9, 3, 7, 2, 2, 1, 2, 7, 7, 9, 3, 3, 9, 7, 7, 1, 8, 6, 9, 7, 2, 5, 1, 8, 3, 2, 6, 4, 5, 3, 5, 4, 1, 8, 4, 4, 5, 4, 7, 4, 1, 1, 1, 5, 5, 6, 2, 5, 8, 7, 7, 9, 2, 8, 3, 7, 5, 9, 7, 4, 1, 5, 4, 6, 9, 4, 6, 1, 6, 3, 2, 3, 1, 9, 2, 5, 2, 6, 4, 2, 8, 4, 4, 8, 1, 4, 8, 7, 4, 1, 1, 5, 3, 8, 6, 9, 2, 9, 5, 6, 6, 6, 3, 2, 4, 5, 7, 4, 8, 5, 7, 3, 9, 5, 6, 3, 7, 2, 5, 8, 8, 2, 8, 4, 3, 5, 1, 9, 9, 5, 9, 2, 8, 1, 2, 4, 3, 5, 5, 3, 4, 2, 9, 1, 7, 8, 2, 7, 1, 9, 8, 2, 7, 3, 4, 3, 3, 1, 1, 1, 6, 1, 3, 6, 1, 6, 4, 4, 2, 9, 6, 2, 7, 7, 8, 9, 5, 5, 8, 6, 9, 9, 6, 7, 3, 9, 3, 3, 9, 5, 2, 1, 3, 5, 2, 8, 8, 4, 4, 6, 1, 4, 3, 4, 2, 6, 3, 3, 3, 3, 1, 4, 8, 1, 4, 5, 1, 6, 4, 3, 2, 1, 6, 8, 9, 6, 7, 5, 9, 9, 5, 5, 2, 2, 1, 9, 3, 9, 6, 9, 4, 5, 7, 7, 1, 3, 8, 3, 7, 6, 5, 8, 8, 1, 9, 6, 2, 9, 4, 6, 6, 2, 6, 1, 7, 5, 5, 9, 5, 4, 9, 6, 7, 4, 8, 5, 2, 2, 7, 9, 5, 1, 3, 5, 8, 2, 7, 8, 4, 1, 3, 1, 4, 5, 4, 4, 4, 9, 9, 3, 2, 6, 1, 8, 3, 7, 8, 1, 9, 3, 8, 9, 7, 8, 4, 8, 5, 8, 7, 3, 9, 7, 3, 8, 4, 9, 9, 5, 2, 3, 7, 1, 7, 9, 2, 1, 7, 7, 3, 6, 5, 3, 5, 6, 5, 8, 1, 8, 7, 4, 8, 3, 4, 1, 6, 9, 5, 6, 2, 2, 2, 2, 5, 5, 3, 8, 1, 3, 8, 9, 6, 2, 6, 6, 8, 9, 8, 5, 2, 7, 9, 6, 4, 2, 3, 2, 4, 5, 3, 3, 5, 4, 9, 4, 1, 3, 4, 3, 7, 4, 5, 2, 2, 2, 5, 6, 1, 7, 3, 9, 1, 7, 3, 9, 7, 7, 7, 3, 7, 9, 4, 4, 6, 2, 9, 7, 4, 9, 1, 8, 5, 3, 8, 6, 4, 9, 7, 7, 4, 1, 2, 8, 6, 6, 5, 5, 2, 9, 2, 6, 9, 7, 6, 7, 2, 7, 9, 7, 1, 6, 9, 4, 3, 6, 4, 7, 5, 9, 5, 5, 9, 5, 6, 8, 1, 4, 8, 9, 4, 8, 2, 1, 3, 5, 2, 4, 4, 1, 4, 5, 7, 6, 7, 4, 7, 7, 9, 4, 3, 3, 5, 7, 1, 6, 3, 3, 2, 5, 2, 9, 6, 1, 4, 5, 7, 2, 1, 2, 5, 4, 7, 9, 5, 7, 7, 1, 4, 3, 3, 8, 5, 5, 2, 6, 5, 6, 4, 9, 4, 9, 7, 2, 1, 1, 1, 2, 5, 6, 9, 1, 2, 8, 6, 1, 4, 8, 4, 7, 6, 5, 3, 3, 1, 3, 2, 3, 1, 9, 6, 6, 7, 7, 9, 2};
 
-    size = values.size();
+
     capacity = 2000;
 
 
@@ -256,18 +268,18 @@ int main()
     if (a){
     values = {4, 5, 4};
     weights = {3, 4, 3};
-    size = values.size();
+
     capacity = 4;
 
     }
 
-    std::vector<Item> arr;
-    for (int i = 0; i < size; i++)
+    std::vector<Item> items;
+    for (int i = 0; i < values.size(); i++)
     {
-        arr.push_back({(float)weights[i], values[i], i});
+        items.push_back(Item((float)weights[i], (float)values[i], i));
     }
 
-    knapsack(arr);
+    knapsack(items);
 
     return 0;
 }

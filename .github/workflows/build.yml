@@ -26,5 +26,5 @@ jobs:
           
       - name: Run tests and linting
         run: |
-          g++ hello.cpp
+          g++ knapsack.cpp
           ./a.out

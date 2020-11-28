@@ -226,26 +226,6 @@ public:
     }
 
 
-    double upper_bound(){
-
-        double result = (double) value();
-
-        std::vector<double> value_per_weight(problem->values.size(), 1.0);
-
-        for (int i = 0; i < problem->values.size(); i++)
-        {
-            // In order to return a double, at least one of the ints must be explicitly cast to a double.
-            value_per_weight[i] = -problem->values[i] / (double)problem->weights[i];
-        }
-
-        // Sort indices with respect to the values over weights
-        std::vector<size_t> indices = argsort(value_per_weight);
-
-        
-        
-
-
-    }
 
 };
 
