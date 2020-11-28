@@ -1,11 +1,12 @@
 // C++ Program to implement 0/1
 // knapsack using LC Branch and Bound
 
-#include <bits/stdc++.h>
+//#include <bits/stdc++.h>
 #include <vector>
 #include <queue>
 #include <algorithm>
 #include <iostream>
+#include <climits>
 // using namespace std;
 
 // Stores the number of items
@@ -79,10 +80,13 @@ float lower_bound(float total_value, float total_weight, int idx, std::vector<It
     return value;
 }
 
-class comp
+
+
+
+class Compare
 {
 public:
-    bool operator()(Node a, Node b)
+    bool operator() (Node a, Node b)
     {
         return a.lower_bound > b.lower_bound;
     }
@@ -109,18 +113,18 @@ void knapsack(std::vector<Item> &arr)
 
     // Priority queue to store the nodes based on lower bounds
     // https://en.cppreference.com/w/cpp/container/priority_queue
-    std::priority_queue<Node, std::vector<Node>, comp> priority_queue;
+    std::priority_queue<Node, std::vector<Node>, Compare> pq;
 
     Node current, left, right;
     current.lower_bound = current.upper_bound = current.total_weight = current.total_value = current.level = current.flag = 0;
 
     // Insert a dummy node
-    priority_queue.push(current);
+    pq.push(current);
 
-    while (!priority_queue.empty())
+    while (!pq.empty())
     {
-        current = priority_queue.top();
-        priority_queue.pop();
+        current = pq.top();
+        pq.pop();
         std::cout << "Popped." << std::endl;
 
         if (current.upper_bound > min_lb || current.upper_bound >= final_lb)
@@ -134,6 +138,8 @@ void knapsack(std::vector<Item> &arr)
             // best values is equal to final_lb
             continue;
         }
+
+        std::cout << current.level << std::endl;
 
         // update the path
         if (current.level != 0)
@@ -150,6 +156,8 @@ void knapsack(std::vector<Item> &arr)
         }
 
         int level = current.level;
+
+        //std:std::cout << level << std::endl;
 
         // right node -> Exludes current item
         // Hence, cp, cw will obtain the value
@@ -182,10 +190,10 @@ void knapsack(std::vector<Item> &arr)
                 current.total_weight + arr[level].weight,
                 level + 1, arr);
 
-            right.level = level + 1;
-            right.flag = true;
-            right.total_value = current.total_value - arr[level].value;
-            right.total_weight = current.total_weight + arr[level].weight;
+            left.level = level + 1;
+            left.flag = true;
+            left.total_value = current.total_value - arr[level].value;
+            left.total_weight = current.total_weight + arr[level].weight;
         }
 
         // If Left node cannot be inserted
@@ -209,11 +217,11 @@ void knapsack(std::vector<Item> &arr)
 
         if (min_lb >= left.upper_bound)
         {
-            priority_queue.push(left);
+            pq.push(left);
         }
         if (min_lb >= right.upper_bound)
         {
-            priority_queue.push(right);
+            pq.push(right);
         }
     }
 
@@ -243,7 +251,9 @@ int main()
     size = values.size();
     capacity = 2000;
 
-    if (true){
+
+    bool a = true;
+    if (a){
     values = {4, 5, 4};
     weights = {3, 4, 3};
     size = values.size();
