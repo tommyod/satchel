@@ -7,18 +7,25 @@
 #include <algorithm>
 #include <iostream>
 #include <climits>
+#include <cfloat>
+#include <utility>
 // using namespace std;
 
-// Stores the knapsack capacity
-float capacity;
-
-// TODO: What does 'typedef' mean?
-// TODO: Why does it say Item after the definition?
+/*Print a vector*/
+template <typename T> // This line lets the function below take arbitrary vectors (int or float)
+void print_vector(std::vector<T> &vector)
+{
+    for (auto element : vector)
+    {
+        std::cout << element << " ";
+    }
+    std::cout << std::endl;
+}
 
 class Item
 {
 public:
-    float weight; 
+    float weight;
     float value;
     int idx;
 
@@ -30,12 +37,11 @@ public:
         this->idx = idx;
     }
 
-    void print(){
-        std::cout << "Item(weight="<< weight << ", value="<<value<< ", idx=" <<idx <<")" << std::endl;
+    void print()
+    {
+        std::cout << "Item(weight=" << weight << ", value=" << value << ", idx=" << idx << ")" << std::endl;
     }
-
 };
-
 
 typedef struct Node
 {
@@ -47,99 +53,86 @@ typedef struct Node
     float total_weight; // Sum of the weights of the items included
 } Node;
 
+
 // Function to calculate upper bound (includes fractional part of the items)
-float upper_bound(float total_value, float total_weight,
-                  int idx, std::vector<Item> &items)
-{
-    float value = total_value;
-    float weight = total_weight;
-    for (int i = idx; i < items.size(); i++)
-    {
-        if (weight + items[i].weight <= capacity)
-        {
-            weight += items[i].weight;
-            value -= items[i].value;
-        }
-        else
-        {
-            value -= (float)(capacity - weight) / items[i].weight * items[i].value;
-            break;
-        }
-    }
-    return value;
-}
-
 // Function to calculate lower bound (no fractional part of the items)
-float lower_bound(float total_value, float total_weight, int idx, std::vector<Item> &items)
+std::pair<float, float> bound(float capacity, float total_value, float total_weight,
+                  int start_index, std::vector<Item> &items)
 {
-    float value = total_value;
+    float upper_bound = total_value;
+    float lower_bound  = total_value;
+
     float weight = total_weight;
-    for (int i = idx; i < items.size(); i++)
+    for (int i = start_index; i < items.size(); i++)
     {
         if (weight + items[i].weight <= capacity)
         {
             weight += items[i].weight;
-            value -= items[i].value;
+            upper_bound -= items[i].value;
+            lower_bound -= items[i].value;
         }
         else
         {
+            upper_bound -= (capacity - weight) / items[i].weight * items[i].value;
             break;
         }
     }
-    return value;
+    return std::make_pair(lower_bound, upper_bound);
 }
-
-
-
 
 class Compare
 {
 public:
-    bool operator() (Node &a, Node &b)
+    bool operator()(Node &a, Node &b)
     {
         return a.lower_bound > b.lower_bound;
     }
 };
 
-void knapsack(std::vector<Item> &items)
+std::vector<bool> knapsack(std::vector<Item> &items, float capacity)
 {
 
-    // Sort the items based on the value/weight ratio
+    // Sort the items based on efficiency, e.g., value/weight ratio
     sort(items.begin(), items.end(),
          [&](Item &a, Item &b) {
              return (a.value / a.weight) > (b.value / b.weight);
          });
 
     // min_lb -> Minimum lower bound of all the nodes explored
-
     // final_lb -> Minimum lower bound of all the paths that reached the final level
-    float min_lb = 0, final_lb = INT_MAX;
-    
+    float lower_bound_explored = 0;
+    float lower_bound_bottom_level = FLT_MAX;
 
     // curr_path -> Boolean array to store at every index if the element is included or not
     // final_path -> Boolean array to store the result of selection array when it reached the last level
-    std::vector<bool> curr_path = std::vector<bool>(items.size(), false);
-    std::vector<bool> final_path = std::vector<bool>(items.size(), false);
+    std::vector<bool> current_solution = std::vector<bool>(items.size(), false);
+    std::vector<bool> final_solution = std::vector<bool>(items.size(), false);
 
     // Priority queue to store the nodes based on lower bounds
     // https://en.cppreference.com/w/cpp/container/priority_queue
-    std::priority_queue<Node, std::vector<Node>, Compare> pq;
+    std::priority_queue<Node, std::vector<Node>, Compare> priority_queue;
 
     Node current, left, right;
     current.lower_bound = current.upper_bound = current.total_weight = 0;
     current.total_value = current.level = current.flag = 0;
 
     // Insert a dummy node
-    pq.push(current);
+    priority_queue.push(current);
 
-    while (!pq.empty())
+    while (!priority_queue.empty())
     {
 
-        current = pq.top();
-        pq.pop();
-        std::cout << "Popped." << std::endl;
+        std::cout << "===================================" << std::endl;
 
-        if (current.upper_bound > min_lb || current.upper_bound >= final_lb)
+        current = priority_queue.top();
+        priority_queue.pop();
+        std::cout << "Current level: " << current.level << std::endl;
+        std::cout << "Current lower bound: " << current.lower_bound << std::endl;
+        std::cout << "Current upper bound: " << current.upper_bound << std::endl;
+        std::cout << "Current lower bound explored: " << lower_bound_explored << std::endl;
+        print_vector(final_solution);
+
+        if (current.upper_bound > lower_bound_explored || current.upper_bound >= lower_bound_bottom_level)
         {
 
             // If the current node's best case
@@ -148,22 +141,32 @@ void knapsack(std::vector<Item> &items)
             // that path including final_lb
             // eliminates all those paths whose
             // best values is equal to final_lb
+            std::cout << "Pruning solution." << std::endl;
             continue;
         }
 
-        std::cout << current.level << std::endl;
+        // std::cout << current.level << std::endl;
 
         // update the path
         if (current.level != 0)
-            curr_path[current.level - 1] = current.flag;
+        {
+            current_solution[current.level - 1] = current.flag;
+        }
 
         // Reached the bottom of the tree
         if (current.level == items.size())
         {
-            if (current.lower_bound < final_lb)
+            // We found a new best solution
+            if (current.lower_bound < lower_bound_bottom_level)
                 for (int i = 0; i < items.size(); i++)
-                    final_path[items[i].idx] = curr_path[i];
-            final_lb = std::min(current.lower_bound, final_lb);
+                    final_solution[items[i].idx] = current_solution[i];
+
+            // Update the lower bound
+            lower_bound_bottom_level = std::min(current.lower_bound, lower_bound_bottom_level);
+
+            std::cout << "Reached the bottom." << std::endl;
+            print_vector(final_solution);
+
             continue;
         }
 
@@ -172,13 +175,16 @@ void knapsack(std::vector<Item> &items)
         //std:std::cout << level << std::endl;
 
         // right node -> Exludes current item
-        // Hence, cp, cw will obtain the value
-        // of that of parent
-        right.upper_bound = upper_bound(current.total_value,
-                           current.total_weight, level + 1,
-                           items);
-        right.lower_bound = lower_bound(current.total_value, current.total_weight,
-                           level + 1, items);
+
+        std::pair<float, float> lower_upper_bounds = bound(capacity, 
+                                        current.total_value,
+                                        current.total_weight, 
+                                        level + 1,
+                                        items);
+
+        right.upper_bound = lower_upper_bounds.second;
+        right.lower_bound = lower_upper_bounds.first;
+
         right.level = level + 1;
         right.flag = false;
         right.total_value = current.total_value;
@@ -190,17 +196,14 @@ void knapsack(std::vector<Item> &items)
         {
 
             // left node -> includes current item
-            // c and lb should be calculated
-            // including the current item.
-            left.upper_bound = upper_bound(
-                current.total_value - items[level].value,
-                current.total_weight + items[level].weight,
-                level + 1, items);
 
-            left.lower_bound = lower_bound(
-                current.total_value - items[level].value,
-                current.total_weight + items[level].weight,
-                level + 1, items);
+            std::pair<float, float> lower_upper_bounds = bound(capacity,
+                                           current.total_value - items[level].value,
+                                           current.total_weight + items[level].weight,
+                                           level + 1, items);
+
+            left.upper_bound = lower_upper_bounds.second;
+            left.lower_bound = lower_upper_bounds.first;
 
             left.level = level + 1;
             left.flag = true;
@@ -211,75 +214,81 @@ void knapsack(std::vector<Item> &items)
         // If Left node cannot be inserted
         else
         {
-
-            // Stop the left node from
-            // getting added to the
-            // priority queue
+            // Stop the left node from getting added to the priority queue
             left.upper_bound = left.lower_bound = 1;
         }
 
         // Update the lower bound
-        min_lb = std::min(min_lb, left.lower_bound);
-        min_lb = std::min(min_lb, right.lower_bound);
+        lower_bound_explored = std::min(lower_bound_explored, left.lower_bound);
+        lower_bound_explored = std::min(lower_bound_explored, right.lower_bound);
 
-        // Exploring nodes whose
-        // upper bound is greater than
-        // min_lb will never give
-        // the optimal result
+        // Exploring nodes with upper bound is greater than
+        // min_lb will never give the optimal result
 
-        if (min_lb >= left.upper_bound)
+        if (lower_bound_explored >= left.upper_bound)
         {
-            pq.push(left);
+            priority_queue.push(left);
         }
-        if (min_lb >= right.upper_bound)
+        if (lower_bound_explored >= right.upper_bound)
         {
-            pq.push(right);
+            priority_queue.push(right);
         }
     }
 
-    if (final_lb == INT_MAX)
-    {
-        final_lb = 0;
-    }
-
+    // Prepare the solution and return it
     std::cout << "Items in the knapsack : \n";
-
-    for (int i = 0; i < items.size(); i++)
-    {
-        std::cout << final_path[i] << " ";
-    }
+    print_vector(final_solution);
 
     std::cout << "\n";
-    std::cout << "Maximum profit is : " << (-final_lb) << "\n";
+    std::cout << "Maximum profit is : " << (-lower_bound_bottom_level) << "\n";
+    return final_solution;
 }
 
 // Driver Code
 int main()
 {
 
-    std::vector<int> values = {3, 8, 3, 5, 2, 2, 9, 6, 1, 9, 7, 1, 4, 3, 1, 3, 6, 3, 2, 1, 1, 3, 6, 7, 3, 1, 8, 5, 5, 3, 9, 5, 9, 6, 1, 5, 4, 4, 1, 5, 8, 5, 4, 5, 4, 1, 5, 7, 8, 3, 6, 3, 4, 1, 6, 3, 4, 7, 1, 7, 1, 1, 7, 7, 3, 7, 6, 1, 9, 9, 3, 2, 1, 8, 4, 4, 2, 1, 1, 7, 9, 3, 4, 3, 9, 1, 6, 2, 8, 4, 2, 3, 7, 9, 5, 5, 1, 1, 5, 9, 9, 8, 8, 8, 6, 4, 5, 2, 9, 1, 1, 2, 5, 8, 4, 7, 4, 8, 6, 8, 7, 2, 9, 9, 3, 5, 3, 2, 7, 4, 5, 7, 1, 4, 2, 1, 9, 1, 5, 8, 3, 5, 3, 1, 1, 6, 5, 4, 1, 9, 9, 9, 6, 6, 4, 3, 8, 5, 9, 5, 1, 4, 6, 8, 3, 8, 3, 1, 1, 5, 8, 1, 6, 5, 7, 5, 6, 2, 1, 9, 7, 5, 9, 9, 2, 8, 9, 5, 7, 8, 3, 2, 2, 7, 8, 9, 6, 9, 5, 4, 3, 8, 7, 3, 8, 2, 4, 7, 5, 3, 4, 1, 6, 7, 7, 4, 8, 7, 6, 8, 9, 5, 9, 7, 4, 9, 8, 4, 3, 1, 9, 9, 7, 8, 2, 5, 2, 1, 7, 3, 4, 2, 1, 7, 4, 2, 9, 7, 8, 1, 2, 3, 8, 7, 2, 7, 1, 9, 9, 6, 8, 5, 4, 3, 5, 5, 5, 8, 1, 8, 8, 1, 9, 8, 9, 7, 1, 2, 8, 7, 1, 5, 6, 4, 9, 1, 1, 8, 4, 3, 9, 3, 2, 9, 7, 4, 4, 7, 6, 3, 6, 7, 5, 3, 7, 9, 7, 7, 8, 1, 6, 5, 5, 4, 1, 2, 8, 5, 5, 9, 3, 4, 7, 4, 9, 3, 3, 5, 5, 5, 1, 4, 3, 8, 2, 7, 8, 9, 4, 9, 1, 7, 4, 3, 2, 9, 5, 3, 7, 5, 1, 8, 4, 5, 8, 7, 3, 6, 5, 3, 6, 4, 4, 4, 7, 6, 4, 2, 1, 9, 7, 9, 3, 5, 2, 4, 1, 6, 7, 5, 9, 2, 2, 8, 9, 2, 1, 6, 6, 8, 1, 2, 9, 5, 4, 4, 3, 2, 6, 2, 2, 5, 2, 7, 5, 7, 7, 1, 7, 8, 7, 8, 8, 8, 2, 5, 4, 6, 7, 8, 8, 3, 6, 6, 8, 8, 6, 1, 3, 9, 4, 2, 5, 7, 9, 1, 2, 3, 4, 3, 7, 2, 1, 3, 6, 8, 1, 1, 3, 2, 5, 8, 1, 2, 2, 6, 7, 5, 4, 4, 8, 3, 1, 1, 6, 7, 5, 4, 6, 8, 1, 2, 5, 9, 5, 4, 9, 4, 2, 6, 8, 6, 2, 3, 2, 3, 9, 6, 9, 9, 9, 3, 9, 3, 6, 8, 3, 7, 2, 1, 9, 1, 3, 9, 9, 8, 1, 4, 6, 9, 5, 4, 8, 8, 5, 5, 4, 3, 4, 4, 8, 9, 8, 5, 1, 8, 6, 3, 8, 1, 2, 6, 1, 2, 8, 9, 4, 4, 7, 9, 6, 3, 4, 3, 3, 4, 4, 9, 5, 2, 8, 4, 6, 5, 8, 1, 1, 6, 7, 8, 8, 9, 2, 7, 2, 3, 2, 7, 2, 5, 5, 1, 1, 9, 7, 7, 3, 1, 1, 9, 1, 8, 3, 5, 7, 3, 5, 3, 5, 2, 3, 6, 8, 4, 3, 6, 7, 3, 8, 8, 8, 2, 9, 5, 9, 1, 8, 3, 5, 4, 8, 9, 2, 9, 5, 4, 6, 6, 4, 2, 8, 6, 9, 8, 9, 5, 5, 1, 9, 7, 6, 8, 2, 8, 4, 9, 6, 4, 7, 4, 1, 1, 5, 9, 8, 4, 1, 5, 5, 8, 2, 3, 2, 2, 2, 5, 1, 7, 5, 9, 2, 2, 9, 7, 6, 8, 6, 4, 3, 2, 2, 9, 6, 9, 6, 3, 4, 6, 5, 7, 8, 3, 5, 9, 8, 2, 4, 9, 1, 3, 1, 8, 9, 5, 1, 8, 1, 4, 4, 5, 2, 1, 4, 6, 7, 2, 4, 8, 2, 6, 6, 4, 8, 4, 9, 2, 3, 4, 5, 3, 4, 2, 9, 6, 6, 5, 7, 3, 7, 1, 7, 1, 8, 6, 5, 1, 2, 8, 4, 5, 7, 8, 3, 3, 7, 1, 2, 5, 6, 6, 4, 4, 7, 4, 2, 9, 4, 1, 5, 8, 3, 7, 5, 7, 7, 2, 1, 3, 2, 8, 3, 2, 9, 3, 7, 3, 4, 7, 8, 7, 2, 7, 8, 9, 2, 6, 5, 1, 7, 3, 4, 3, 5, 8, 8, 9, 3, 2, 9, 5, 8, 9, 1, 9, 8, 5, 6, 6, 6, 6, 1, 5, 8, 1, 2, 3, 5, 1, 8, 2, 3, 7, 5, 2, 2, 2, 6, 1, 8, 8, 4, 4, 6, 7, 3, 8, 1, 5, 5, 5, 8, 8, 6, 1, 2, 2, 2, 2, 1, 6, 4, 7, 5, 8, 6, 8, 1, 4, 8, 1, 5, 4, 5, 5, 1, 3, 8, 2, 9, 8, 8, 1, 3, 5, 3, 2, 2, 2, 7, 8, 7, 2, 7, 4, 3, 3, 6, 5, 8, 2, 2, 2, 3, 6, 6, 7, 4, 3, 2, 8, 3, 5, 6, 3, 9, 2, 6, 5, 2, 7, 7, 6, 9, 9, 9, 6, 8, 4, 6, 2, 8, 4, 9, 6, 9, 4, 2, 7, 4, 8, 2, 3, 2, 4, 1, 8, 2, 6, 5, 8, 3, 7, 7, 3, 1, 6, 9, 8, 8, 9, 9, 3, 3, 2, 4, 9, 7, 3, 5, 1, 7, 1, 5, 1, 9, 8, 3, 2, 8, 6, 8, 5, 7, 5, 2, 2, 8, 3, 4, 8, 9, 6, 1, 8, 2, 9, 7, 2, 5, 5, 2, 4, 2, 7, 1, 5, 5, 4, 4, 6};
-    std::vector<int> weights = {9, 3, 6, 8, 2, 8, 4, 8, 3, 4, 1, 6, 3, 1, 8, 3, 5, 7, 2, 8, 7, 3, 1, 6, 1, 9, 4, 5, 3, 1, 9, 1, 6, 3, 9, 9, 2, 4, 5, 6, 6, 5, 5, 6, 2, 6, 8, 9, 3, 5, 6, 4, 5, 3, 4, 4, 6, 9, 2, 1, 5, 5, 6, 1, 1, 1, 2, 9, 9, 5, 1, 2, 4, 7, 5, 1, 4, 1, 3, 4, 1, 7, 9, 5, 2, 4, 8, 8, 2, 4, 9, 2, 6, 7, 9, 1, 6, 6, 2, 5, 4, 6, 7, 8, 3, 6, 2, 3, 8, 7, 4, 8, 6, 7, 1, 8, 8, 5, 3, 7, 2, 3, 3, 8, 5, 1, 3, 4, 6, 7, 9, 5, 2, 3, 3, 3, 5, 7, 6, 9, 2, 4, 6, 3, 8, 8, 7, 5, 2, 9, 5, 4, 8, 8, 9, 8, 6, 3, 7, 8, 3, 4, 3, 6, 4, 9, 4, 9, 9, 2, 7, 3, 8, 2, 7, 5, 2, 3, 4, 1, 2, 7, 6, 4, 9, 8, 7, 7, 4, 7, 2, 2, 9, 6, 2, 5, 8, 9, 9, 8, 6, 3, 9, 3, 4, 4, 7, 2, 1, 9, 2, 7, 2, 3, 7, 6, 1, 8, 4, 2, 2, 8, 4, 4, 4, 4, 1, 8, 4, 4, 3, 3, 5, 6, 3, 8, 5, 8, 6, 3, 3, 1, 8, 2, 9, 9, 9, 2, 2, 3, 3, 2, 6, 3, 5, 8, 1, 7, 2, 2, 8, 6, 3, 9, 6, 8, 4, 1, 5, 4, 5, 5, 5, 8, 2, 8, 1, 3, 5, 2, 7, 9, 9, 5, 2, 1, 5, 7, 1, 2, 3, 9, 2, 5, 1, 7, 7, 1, 7, 7, 1, 6, 5, 1, 5, 9, 7, 2, 4, 4, 3, 2, 1, 3, 5, 2, 2, 4, 7, 1, 4, 5, 1, 5, 4, 1, 2, 4, 6, 7, 2, 9, 5, 7, 2, 6, 6, 2, 1, 5, 2, 4, 8, 2, 4, 8, 1, 4, 6, 8, 8, 2, 7, 9, 4, 4, 4, 8, 5, 5, 7, 2, 4, 6, 9, 2, 6, 9, 6, 7, 6, 9, 2, 8, 2, 6, 8, 8, 6, 4, 9, 9, 5, 9, 9, 5, 6, 6, 1, 7, 1, 4, 7, 3, 2, 8, 5, 6, 5, 3, 5, 4, 9, 7, 5, 5, 3, 1, 8, 4, 7, 2, 7, 9, 5, 6, 3, 6, 4, 9, 2, 8, 5, 5, 5, 1, 9, 3, 7, 2, 2, 1, 2, 7, 7, 9, 3, 3, 9, 7, 7, 1, 8, 6, 9, 7, 2, 5, 1, 8, 3, 2, 6, 4, 5, 3, 5, 4, 1, 8, 4, 4, 5, 4, 7, 4, 1, 1, 1, 5, 5, 6, 2, 5, 8, 7, 7, 9, 2, 8, 3, 7, 5, 9, 7, 4, 1, 5, 4, 6, 9, 4, 6, 1, 6, 3, 2, 3, 1, 9, 2, 5, 2, 6, 4, 2, 8, 4, 4, 8, 1, 4, 8, 7, 4, 1, 1, 5, 3, 8, 6, 9, 2, 9, 5, 6, 6, 6, 3, 2, 4, 5, 7, 4, 8, 5, 7, 3, 9, 5, 6, 3, 7, 2, 5, 8, 8, 2, 8, 4, 3, 5, 1, 9, 9, 5, 9, 2, 8, 1, 2, 4, 3, 5, 5, 3, 4, 2, 9, 1, 7, 8, 2, 7, 1, 9, 8, 2, 7, 3, 4, 3, 3, 1, 1, 1, 6, 1, 3, 6, 1, 6, 4, 4, 2, 9, 6, 2, 7, 7, 8, 9, 5, 5, 8, 6, 9, 9, 6, 7, 3, 9, 3, 3, 9, 5, 2, 1, 3, 5, 2, 8, 8, 4, 4, 6, 1, 4, 3, 4, 2, 6, 3, 3, 3, 3, 1, 4, 8, 1, 4, 5, 1, 6, 4, 3, 2, 1, 6, 8, 9, 6, 7, 5, 9, 9, 5, 5, 2, 2, 1, 9, 3, 9, 6, 9, 4, 5, 7, 7, 1, 3, 8, 3, 7, 6, 5, 8, 8, 1, 9, 6, 2, 9, 4, 6, 6, 2, 6, 1, 7, 5, 5, 9, 5, 4, 9, 6, 7, 4, 8, 5, 2, 2, 7, 9, 5, 1, 3, 5, 8, 2, 7, 8, 4, 1, 3, 1, 4, 5, 4, 4, 4, 9, 9, 3, 2, 6, 1, 8, 3, 7, 8, 1, 9, 3, 8, 9, 7, 8, 4, 8, 5, 8, 7, 3, 9, 7, 3, 8, 4, 9, 9, 5, 2, 3, 7, 1, 7, 9, 2, 1, 7, 7, 3, 6, 5, 3, 5, 6, 5, 8, 1, 8, 7, 4, 8, 3, 4, 1, 6, 9, 5, 6, 2, 2, 2, 2, 5, 5, 3, 8, 1, 3, 8, 9, 6, 2, 6, 6, 8, 9, 8, 5, 2, 7, 9, 6, 4, 2, 3, 2, 4, 5, 3, 3, 5, 4, 9, 4, 1, 3, 4, 3, 7, 4, 5, 2, 2, 2, 5, 6, 1, 7, 3, 9, 1, 7, 3, 9, 7, 7, 7, 3, 7, 9, 4, 4, 6, 2, 9, 7, 4, 9, 1, 8, 5, 3, 8, 6, 4, 9, 7, 7, 4, 1, 2, 8, 6, 6, 5, 5, 2, 9, 2, 6, 9, 7, 6, 7, 2, 7, 9, 7, 1, 6, 9, 4, 3, 6, 4, 7, 5, 9, 5, 5, 9, 5, 6, 8, 1, 4, 8, 9, 4, 8, 2, 1, 3, 5, 2, 4, 4, 1, 4, 5, 7, 6, 7, 4, 7, 7, 9, 4, 3, 3, 5, 7, 1, 6, 3, 3, 2, 5, 2, 9, 6, 1, 4, 5, 7, 2, 1, 2, 5, 4, 7, 9, 5, 7, 7, 1, 4, 3, 3, 8, 5, 5, 2, 6, 5, 6, 4, 9, 4, 9, 7, 2, 1, 1, 1, 2, 5, 6, 9, 1, 2, 8, 6, 1, 4, 8, 4, 7, 6, 5, 3, 3, 1, 3, 2, 3, 1, 9, 6, 6, 7, 7, 9, 2};
+    std::vector<float> values;
+    std::vector<float> weights;
 
+    // this code
+    // 100 items: 0.654 seconds
+    // 1000 items: 0.734 seconds
+    // 10000 items: 11.089 seconds
+    // 50000 items: 200.795 seconds
 
-    capacity = 2000;
+    // google OR tools
+    // 1000 items: 0.006114335 seconds
+    // 10000 items: 0.3559 seconds
+    // 50000 items: 10.606341 seconds
+    // 100000 items: 52.735 seconds
 
+    // Create a (possibly) large, random example
+    for (size_t i = 0; i < 5; i++)
+    {
+        float r = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+        values.push_back(r);
+        r = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+        weights.push_back(r);
+    }
+    float capacity = weights.size() * 0.2;
 
-    bool a = true;
-    if (a){
-    values = {4, 5, 4};
-    weights = {3, 4, 3};
-
-    capacity = 4;
-
+    // Create a small example
+    if (true)
+    {
+        values = {4, 5, 4};
+        weights = {3, 4, 3};
+        capacity = 4.0;
     }
 
+    // Prepare the example for the algorithm
     std::vector<Item> items;
     for (int i = 0; i < values.size(); i++)
     {
         items.push_back(Item((float)weights[i], (float)values[i], i));
     }
 
-    knapsack(items);
+    knapsack(items, capacity);
 
     return 0;
 }
