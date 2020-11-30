@@ -11,6 +11,7 @@
 #include <utility>
 #include <cmath>
 #include <chrono>
+#include <functional>
 // using namespace std;
 
 int VERBOSITY = 99;
@@ -127,10 +128,17 @@ class Compare
 public:
     bool operator()(Node &a, Node &b)
     {
-        return a.upper_bound < b.upper_bound;
+        return a.depth/10 + a.upper_bound < b.depth/10 + b.upper_bound;
+        //return a.upper_bound < b.upper_bound; // <- best first search
         //return a.lower_bound < b.lower_bound;
     }
 };
+
+using cmp1 = bool(*)(Node&, Node&);
+bool best_first(Node &a, Node &b)
+{
+    return a.upper_bound < b.upper_bound; // <- best first search
+}
 
 std::vector<bool> knapsack(std::vector<Item> &items, double capacity)
 {
@@ -168,7 +176,9 @@ std::vector<bool> knapsack(std::vector<Item> &items, double capacity)
 
     // Priority queue to store the nodes based on lower bounds
     // https://en.cppreference.com/w/cpp/container/priority_queue
-    std::priority_queue<Node, std::vector<Node>, Compare> priority_queue;
+    //std::function<bool(Node, Node)> f_display = Compare();
+    //std::priority_queue<Node, std::vector<Node>, Compare> priority_queue;
+    std::priority_queue<Node, std::vector<Node>, cmp1> priority_queue(best_first);
 
     Node current, left, right;
     current.upper_bound = lower_upper_bounds.second;
