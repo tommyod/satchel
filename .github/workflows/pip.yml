@@ -67,7 +67,7 @@ jobs:
         arch: x64
 
     - name: Build and install
-      run: pip install --verbose . --no-use-pep517 --find-links ${{ github.workspace }}/dist
+      run: pip install --verbose . --find-links ${{ github.workspace }}/dist
 
     - name: Test
       run: python tests/test.py
