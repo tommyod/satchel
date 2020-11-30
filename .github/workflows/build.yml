@@ -34,7 +34,7 @@ jobs:
       - name: Run tests and linting
         run: |
           sudo apt install python3-dev cmake --quiet
-          pip install pybind11 invoke --upgrade
+          pip install pybind11 invoke twine build --upgrade
           python -m pybind11 --cmakedir
           git clone https://github.com/pybind/pybind11
           g++ knapsack.cpp
