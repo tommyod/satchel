@@ -10,8 +10,8 @@
 #include <cfloat>
 #include <utility>
 #include <cmath>
+#include <chrono>
 // using namespace std;
-
 
 int VERBOSITY = 99;
 
@@ -100,13 +100,21 @@ std::pair<double, double> bound(double capacity,
         }
         else
         {
+            if (items[i].weight > capacity)
+            {
+                continue;
+            }
+            else
+            {
+                upper_bound += (capacity - weight) * (items[i].value / items[i].weight);
+                break;
+            }
+
             // std::cout << weight << "  " << items[i].weight << "  " << capacity << std::endl;
             // std::cout << "capacity:" << capacity << std::endl;
             // std::cout << "weight[i]:" << items[i].weight << std::endl;
             // std::cout << "(capacity - weight):" << (capacity - weight) << std::endl;
             // std::cout << "(items[i].value / items[i].weight):" << (items[i].value / items[i].weight) << std::endl;
-            upper_bound += (capacity - weight) * (items[i].value / items[i].weight);
-            break;
         }
     }
     // std::cout << "lower_bound: " << lower_bound << "\nupper_bound: " << upper_bound << std::endl;
@@ -120,6 +128,7 @@ public:
     bool operator()(Node &a, Node &b)
     {
         return a.upper_bound < b.upper_bound;
+        //return a.lower_bound < b.lower_bound;
     }
 };
 
@@ -133,18 +142,24 @@ std::vector<bool> knapsack(std::vector<Item> &items, double capacity)
              return (a.value / a.weight) > (b.value / b.weight);
          });
 
-    for (auto var : items)
+    if (VERBOSITY >= 3)
     {
-        var.print();
+        for (auto var : items)
+        {
+            var.print();
+        }
     }
+
+    // Compute the upper bound on the problem
+    std::pair<double, double> lower_upper_bounds = bound(capacity, 0.0, 0.0, 0, items);
 
     // min_lb -> Minimum lower bound of all the nodes explored
     // final_lb -> Minimum lower bound of all the paths that reached the final current.depth
     double max_lower_bound_partial = 0;
     double best_objective_value = 0;
-    int nodes_explored = 0;
-    int nodes_pruned = 0;
-    int nodes_remaining = (int) std::pow(2.0, items.size());
+    signed long nodes_explored = 0;
+    double nodes_pruned = 0;
+    double nodes_remaining = (double) std::pow(2.0, items.size());
 
     // curr_path -> Boolean array to store at every index if the element is included or not
     // final_path -> Boolean array to store the result of selection array when it reached the last current.depth
@@ -156,7 +171,8 @@ std::vector<bool> knapsack(std::vector<Item> &items, double capacity)
     std::priority_queue<Node, std::vector<Node>, Compare> priority_queue;
 
     Node current, left, right;
-    current.lower_bound = current.upper_bound = current.total_weight = 0;
+    current.upper_bound = lower_upper_bounds.second;
+    current.lower_bound = current.total_weight = 0;
     current.total_value = current.depth = current.flag = 0;
 
     // Insert a dummy node
@@ -164,27 +180,29 @@ std::vector<bool> knapsack(std::vector<Item> &items, double capacity)
 
     while (!priority_queue.empty())
     {
-
-        std::cout << "===================================" << std::endl;
-
         // Get the top item and pop it off
         current = priority_queue.top();
         priority_queue.pop();
 
-        if (VERBOSITY >= 3){
+        if (VERBOSITY >= 3)
+        {
             std::cout << "====== POPPED FROM PRIORITY QUEUE =====" << std::endl;
+            std::cout << "Nodes explored: " << nodes_explored << std::endl;
             current.print();
             std::cout << "Maximal lower bound (partial solution): " << max_lower_bound_partial << std::endl;
             std::cout << "Maximal lower bound (full solution): " << best_objective_value << std::endl;
+            // This only works because the priority queue sorts by upper bounds
+            std::cout << "Minimal upper bound (partial solution): " << current.upper_bound << std::endl;
         }
 
-        // If the upper bound on the node is lower than the maximal upper bound on 
+        // If the upper bound on the node is lower than the maximal upper bound on
         // partial or full solutions, do not proceed.
         if (current.upper_bound < std::min(max_lower_bound_partial, best_objective_value))
         {
-            int pruned_now = (int) std::pow(2.0, items.size() - current.depth);
-            nodes_pruned -= pruned_now;
-            if (VERBOSITY >= 2){
+            double pruned_now = (double)std::pow(2.0, items.size() - current.depth);
+            nodes_pruned += pruned_now;
+            if (VERBOSITY >= 2)
+            {
                 std::cout << "Solutions pruned (now): " << pruned_now << std::endl;
                 std::cout << "Solutions pruned (total): " << nodes_pruned << std::endl;
             }
@@ -201,11 +219,10 @@ std::vector<bool> knapsack(std::vector<Item> &items, double capacity)
         // Reached the bottom of the tree
         if (current.depth == items.size())
         {
-            std::cout << "Reached the bottom." << std::endl;
             // We found a new best solution
             if (current.lower_bound > best_objective_value)
             {
-                for (int i = 0; i < items.size(); i++)
+                for (size_t i = 0; i < items.size(); i++)
                 {
                     final_solution[items[i].idx] = current_solution[i];
                 }
@@ -214,12 +231,12 @@ std::vector<bool> knapsack(std::vector<Item> &items, double capacity)
             // Update the lower bound
             best_objective_value = current.lower_bound;
 
-            if (VERBOSITY >= 2){
+            if (VERBOSITY >= 2)
+            {
                 std::cout << "Found new optimal full solution. Objective: " << best_objective_value << std::endl;
             }
             continue;
         }
-
 
         // ==============================================================================
         // ===== RIGHT NODE - Includes the current item =================================
@@ -242,11 +259,13 @@ std::vector<bool> knapsack(std::vector<Item> &items, double capacity)
 
             if (right.upper_bound >= max_lower_bound_partial)
             {
-                std::cout << "Added right node to priority queue." << std::endl;
+                if (VERBOSITY >= 2)
+                {
+                    std::cout << "Added right node to priority queue." << std::endl;
+                }
                 priority_queue.push(right);
                 max_lower_bound_partial = std::max(max_lower_bound_partial, right.lower_bound);
             }
-            
         }
 
         // ==============================================================================
@@ -260,7 +279,7 @@ std::vector<bool> knapsack(std::vector<Item> &items, double capacity)
 
         left.upper_bound = lower_upper_bounds.second;
         left.lower_bound = lower_upper_bounds.first;
-        
+
         left.depth = current.depth + 1;
         left.flag = false;
         left.total_value = current.total_value;
@@ -268,7 +287,10 @@ std::vector<bool> knapsack(std::vector<Item> &items, double capacity)
 
         if (left.upper_bound >= max_lower_bound_partial)
         {
-            std::cout << "Added left node to priority queue." << std::endl;
+            if (VERBOSITY >= 2)
+            {
+                std::cout << "Added left node to priority queue." << std::endl;
+            }
             priority_queue.push(left);
             max_lower_bound_partial = std::max(max_lower_bound_partial, left.lower_bound);
         }
@@ -279,8 +301,8 @@ std::vector<bool> knapsack(std::vector<Item> &items, double capacity)
     // print_vector(final_solution);
 
     // std::cout << "\n";
-    std::cout << "Maximum profit is : " << (best_objective_value) << "\n";
-    print_vector(final_solution);
+    //std::cout << "Maximum profit is : " << (best_objective_value) << "\n";
+    //print_vector(final_solution);
     return final_solution;
 }
 
@@ -291,11 +313,11 @@ int main()
     std::vector<double> values;
     std::vector<double> weights;
 
-    // this code
-    // 100 items: 0.654 seconds
-    // 1000 items: 0.734 seconds
-    // 10000 items: 11.089 seconds
-    // 50000 items: 200.795 seconds
+    // this code (with -O3 flag)
+    // 1000 items:   0.00105811 seconds
+    // 10000 items:  0.03769266 seconds
+    // 50000 items:  0.84353074 seconds
+    // 100000 items: 3.36044960 seconds
 
     // google OR tools
     // 1000 items: 0.006114335 seconds
@@ -304,7 +326,7 @@ int main()
     // 100000 items: 52.735 seconds
 
     // Create a (possibly) large, random example
-    for (size_t i = 0; i < 10; i++)
+    for (size_t i = 0; i < 200; i++)
     {
         double r = static_cast<double>(rand()) / static_cast<double>(RAND_MAX);
         values.push_back(r);
@@ -316,9 +338,9 @@ int main()
     // Create a small example
     if (false)
     {
-        values = {4, 5, 4, 1, 5, 7, 9};
-        weights = {3, 4, 3, 3, 4, 6, 8};
-        capacity = 12.0;
+        values = {4, 4, 4, 5, 12, 6, 6, 99};
+        weights = {3, 3, 3, 4, 1, 5, 5, 5};
+        capacity = 4.0;
     }
 
     // Prepare the example for the algorithm
@@ -328,7 +350,16 @@ int main()
         items.push_back(Item((double)weights[i], (double)values[i], i));
     }
 
-    knapsack(items, capacity);
+    std::cout << "Items: " << items.size() << std::endl;
+
+    auto begin = std::chrono::high_resolution_clock::now();
+    std::vector<bool> final_solution = knapsack(items, capacity);
+    // Stop measuring time and calculate the elapsed time
+    auto end = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin);
+    printf("Time measured: %.8f seconds.\n", elapsed.count() * 1e-9);
+
+
 
     return 0;
     // Maximum profit is : 3642.57 // 10000
