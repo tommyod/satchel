@@ -6,11 +6,6 @@
 #include <numeric>
 #include <iostream>
 #include <execution>
-#include <iostream>
-#include <chrono>
-#include <vector>
-#include <numeric>
-#include <execution>
 
 int main () {
     srand(1);
@@ -28,9 +23,8 @@ int main () {
     auto begin = std::chrono::high_resolution_clock::now();
 
     //float sum = std::reduce(numbers.begin(), numbers.end(), 0.0);
-float sum = std::reduce(std::execution::par, numbers.cbegin(), numbers.cend());
-    //float sum = std::reduce(numbers.begin(), numbers.end(), 0.0);
-    
+    float sum = std::reduce(std::execution::par, numbers.cbegin(), numbers.cend());
+
     // Stop measuring time and calculate the elapsed time
     auto end = std::chrono::high_resolution_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin);
